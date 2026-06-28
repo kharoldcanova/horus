@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 class SpectrumChart extends StatelessWidget {
   final List<double> magnitudes;
   final double sampleRate;
+  final double maxDisplayFreq;
 
   const SpectrumChart({
     super.key,
     required this.magnitudes,
     required this.sampleRate,
+    this.maxDisplayFreq = 30.0,
   });
 
   @override
@@ -19,6 +21,7 @@ class SpectrumChart extends StatelessWidget {
         painter: _SpectrumPainter(
           magnitudes: magnitudes,
           sampleRate: sampleRate,
+          maxDisplayFreq: maxDisplayFreq,
         ),
         size: Size.infinite,
       ),
@@ -29,6 +32,7 @@ class SpectrumChart extends StatelessWidget {
 class _SpectrumPainter extends CustomPainter {
   final List<double> magnitudes;
   final double sampleRate;
+  final double maxDisplayFreq;
 
   static const _bgColor = Color(0xFF1A1A2E);
   static const _gridColor = Color(0x20FFFFFF);
@@ -44,6 +48,7 @@ class _SpectrumPainter extends CustomPainter {
   _SpectrumPainter({
     required this.magnitudes,
     required this.sampleRate,
+    this.maxDisplayFreq = 30.0,
   });
 
   @override
@@ -66,7 +71,7 @@ class _SpectrumPainter extends CustomPainter {
     if (chartRect.width <= 0 || chartRect.height <= 0) return;
 
     final fftSize = magnitudes.length * 2;
-    final maxFreq = 30.0; // Show up to 30 Hz
+    final maxFreq = maxDisplayFreq; // Show up to maxDisplayFreq Hz
     final maxBin = (maxFreq * fftSize / sampleRate).round().clamp(
           0,
           magnitudes.length - 1,
@@ -159,8 +164,9 @@ class _SpectrumPainter extends CustomPainter {
       canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
     }
 
-    // Vertical grid lines at labeled frequencies
-    for (int freq = 5; freq <= 30; freq += 5) {
+    // Draw vertical grid lines at labeled frequencies
+    final gridStep = maxDisplayFreq <= 30.0 ? 5.0 : 25.0;
+    for (double freq = gridStep; freq <= maxDisplayFreq; freq += gridStep) {
       final fftSize = magnitudes.length * 2;
       final bin = freq * fftSize / sampleRate;
       final x = rect.left + (bin / magnitudes.length) * rect.width;
@@ -173,8 +179,9 @@ class _SpectrumPainter extends CustomPainter {
   void _drawAxesLabels(Canvas canvas, Rect rect, double maxMag) {
     // X-axis frequency labels
     final xLabelStyle = TextStyle(color: _labelColor, fontSize: 9);
+    final gridStep = maxDisplayFreq <= 30.0 ? 5.0 : 25.0;
 
-    for (int freq = 5; freq <= 30; freq += 5) {
+    for (double freq = gridStep; freq <= maxDisplayFreq; freq += gridStep) {
       final fftSize = magnitudes.length * 2;
       final bin = freq * fftSize / sampleRate;
       final x = rect.left + (bin / magnitudes.length) * rect.width;
@@ -219,5 +226,6 @@ class _SpectrumPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SpectrumPainter oldDelegate) =>
       oldDelegate.magnitudes != magnitudes ||
-      oldDelegate.sampleRate != sampleRate;
+      oldDelegate.sampleRate != sampleRate ||
+      oldDelegate.maxDisplayFreq != maxDisplayFreq;
 }

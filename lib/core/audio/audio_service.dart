@@ -16,6 +16,7 @@ class AudioFrame {
   final double confidence;
   final List<double> waveform;
   final List<double> spectrum;
+  final List<double>? signalBuffer; // 8000 samples for ML, null if <2s data
 
   const AudioFrame({
     required this.timestamp,
@@ -24,6 +25,7 @@ class AudioFrame {
     required this.confidence,
     required this.waveform,
     required this.spectrum,
+    this.signalBuffer,
   });
 }
 
@@ -71,6 +73,14 @@ class AudioService {
 
   Stream<AudioFrame> get frameStream => _frameController.stream;
   bool get isRunning => _isRunning;
+
+  /// Returns a copy of the filtered signal buffer and clears it.
+  /// Call this before [stop] to capture the full scan data.
+  List<double> getBuffer() {
+    final copy = List<double>.from(_buffer);
+    _buffer.clear();
+    return copy;
+  }
 
   AudioService._();
 
@@ -170,6 +180,9 @@ class AudioService {
       confidence: confidence,
       waveform: signal.sublist(math.max(0, signal.length - 400)),
       spectrum: spectrum,
+      signalBuffer: _buffer.length >= _windowSize
+          ? List<double>.from(signal)
+          : null,
     );
 
     _frameController.add(frame);

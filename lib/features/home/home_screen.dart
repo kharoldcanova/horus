@@ -31,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen>
   bool _showFeedback = false;
 
   List<SensorEvent> _window = [];
+  List<double>? _audioSamples;
   DetectionResult? _lastResult;
   String _currentSessionId = '';
   int _scansToday = 0;
@@ -85,6 +86,7 @@ class _HomeScreenState extends State<HomeScreen>
         _showFeedback = false;
         _lastResult = null;
         _window = [];
+        _audioSamples = null;
         _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
       });
 
@@ -92,14 +94,27 @@ class _HomeScreenState extends State<HomeScreen>
       if (mode == SearchMode.audio) {
         _scanSubscription = _audioService.frameStream.listen((frame) {
           if (!mounted) return;
-          setState(() {
-            _lastResult = DetectionResult(
+
+          DetectionResult result;
+          if (frame.signalBuffer != null && _modelReady) {
+            result = _modelService.classifyAudio(
+              signal: frame.signalBuffer!,
+              bpm: frame.bpm,
+              peakConfidence: frame.confidence,
+              timestamp: frame.timestamp.millisecondsSinceEpoch / 1000.0,
+            );
+          } else {
+            result = DetectionResult(
               heartbeatDetected: frame.hasHeartbeat,
               bpm: frame.bpm,
               confidence: frame.confidence,
               mode: DetectionMode.audio,
               timestamp: frame.timestamp.millisecondsSinceEpoch / 1000.0,
             );
+          }
+
+          setState(() {
+            _lastResult = result;
           });
         });
       } else {
@@ -129,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen>
     _scanSubscription = null;
 
     if (_activeMode == SearchMode.audio) {
+      _audioSamples = _audioService.getBuffer();
       await _audioService.stop();
     } else {
       await _sensorService.stop();
@@ -157,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen>
       id: _currentSessionId,
       startTime: DateTime.now(),
       events: _window,
+      audioSamples: _audioSamples,
       notes: heartbeatDetected ? 'latido_confirmado' : 'sin_latido',
     );
 
@@ -170,6 +187,7 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       _isScanning = false;
       _showFeedback = false;
+      _audioSamples = null;
       _scansToday++;
     });
 

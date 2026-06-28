@@ -3,10 +3,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../core/audio/audio_service.dart';
 import '../../core/processing/fft.dart';
 import '../../core/sensors/sensor_constants.dart';
 import '../../core/sensors/sensor_event.dart';
 import '../../core/sensors/sensor_service.dart';
+import 'widgets/audio_waveform_chart.dart';
 import 'widgets/bpm_chart.dart';
 import 'widgets/signal_chart.dart';
 import 'widgets/spectrum_chart.dart';
@@ -19,14 +21,22 @@ class MonitorScreen extends StatefulWidget {
 }
 
 class _MonitorScreenState extends State<MonitorScreen> {
+  // IMU state
   final List<SensorEvent> _buffer = [];
+  final Set<int> _activeChannels = {0, 1, 2, 3, 4, 5};
+
+  // Audio state
+  List<double> _audioWaveform = [];
+
+  // Shared state
   List<double> _magnitudes = [];
   List<double> _bpmHistory = [];
   List<double> _timeLabels = [];
-  final Set<int> _activeChannels = {0, 1, 2, 3, 4, 5};
 
   StreamSubscription<List<SensorEvent>>? _subscription;
+  StreamSubscription<AudioFrame>? _audioSubscription;
   bool _isScanning = false;
+  bool _isAudioMode = false;
   double _peakFreq = 0;
   double _currentBpm = 0;
   double _sessionStart = 0;
@@ -34,14 +44,62 @@ class _MonitorScreenState extends State<MonitorScreen> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _audioSubscription?.cancel();
     super.dispose();
   }
 
   Future<void> _startMonitoring() async {
+    if (AudioService.instance.isRunning) {
+      _startAudioMonitoring();
+    } else {
+      _startImuMonitoring();
+    }
+  }
+
+  void _startAudioMonitoring() {
+    setState(() {
+      _sessionStart = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      _isAudioMode = true;
+      _audioWaveform = [];
+      _magnitudes = [];
+      _bpmHistory = [];
+      _timeLabels = [];
+      _peakFreq = 0;
+      _currentBpm = 0;
+      _isScanning = true;
+    });
+
+    _audioSubscription = AudioService.instance.frameStream.listen(
+      _onAudioFrame,
+      onError: (_) => _stopMonitoring(),
+    );
+  }
+
+  void _onAudioFrame(AudioFrame frame) {
+    if (!mounted) return;
+    setState(() {
+      _audioWaveform = frame.waveform;
+      _magnitudes = frame.spectrum;
+      _currentBpm = frame.bpm;
+      _peakFreq = frame.bpm / 60.0; // BPM → Hz
+
+      final now = DateTime.now().millisecondsSinceEpoch / 1000.0;
+      _timeLabels.add(now - _sessionStart);
+      _bpmHistory.add(frame.bpm);
+
+      if (_bpmHistory.length > 300) {
+        _bpmHistory = _bpmHistory.sublist(_bpmHistory.length - 300);
+        _timeLabels = _timeLabels.sublist(_timeLabels.length - 300);
+      }
+    });
+  }
+
+  Future<void> _startImuMonitoring() async {
     try {
       await SensorService.instance.start();
       setState(() {
         _sessionStart = DateTime.now().millisecondsSinceEpoch / 1000.0;
+        _isAudioMode = false;
         _buffer.clear();
         _magnitudes = [];
         _bpmHistory = [];
@@ -64,7 +122,11 @@ class _MonitorScreenState extends State<MonitorScreen> {
   Future<void> _stopMonitoring() async {
     _subscription?.cancel();
     _subscription = null;
-    await SensorService.instance.stop();
+    _audioSubscription?.cancel();
+    _audioSubscription = null;
+    if (!_isAudioMode) {
+      await SensorService.instance.stop();
+    }
     if (mounted) {
       setState(() => _isScanning = false);
     }
@@ -198,6 +260,27 @@ class _MonitorScreenState extends State<MonitorScreen> {
   }
 
   Widget _buildSignalCard() {
+    if (_isAudioMode) {
+      return _buildCard(
+        icon: Icons.graphic_eq,
+        title: 'Forma de onda (audio)',
+        color: Colors.cyan,
+        children: [
+          SizedBox(
+            height: 200,
+            child: AudioWaveformChart(
+              waveform: _audioWaveform,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '400 muestras · ${_currentBpm > 0 ? "${_currentBpm.round()} BPM" : "---"}',
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ],
+      );
+    }
+
     return _buildCard(
       icon: Icons.monitor_heart,
       title: 'Señal en tiempo real',
@@ -206,7 +289,7 @@ class _MonitorScreenState extends State<MonitorScreen> {
         _buildChannelToggle(),
         const SizedBox(height: 8),
         SizedBox(
-          height: 250,
+          height: 200,
           child: SignalChart(
             events: _buffer,
             activeChannels: _activeChannels,
@@ -228,15 +311,17 @@ class _MonitorScreenState extends State<MonitorScreen> {
         return Padding(
           padding: const EdgeInsets.only(right: 10),
           child: GestureDetector(
-            onTap: () {
-              setState(() {
-                if (isActive) {
-                  _activeChannels.remove(i);
-                } else {
-                  _activeChannels.add(i);
-                }
-              });
-            },
+            onTap: _isAudioMode
+                ? null
+                : () {
+                    setState(() {
+                      if (isActive) {
+                        _activeChannels.remove(i);
+                      } else {
+                        _activeChannels.add(i);
+                      }
+                    });
+                  },
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -271,19 +356,24 @@ class _MonitorScreenState extends State<MonitorScreen> {
   Widget _buildSpectrumCard() {
     return _buildCard(
       icon: Icons.analytics,
-      title: 'Espectro FFT',
+      title: _isAudioMode ? 'Espectro (audio)' : 'Espectro FFT',
       color: Colors.purple,
       children: [
         SizedBox(
           height: 200,
           child: SpectrumChart(
             magnitudes: _magnitudes,
-            sampleRate: SensorConstants.defaultSampleRate,
+            sampleRate: _isAudioMode
+                ? 4000.0
+                : SensorConstants.defaultSampleRate,
+            maxDisplayFreq: _isAudioMode ? 200.0 : 30.0,
           ),
         ),
         const SizedBox(height: 4),
         Text(
-          'Pico: ${_peakFreq.toStringAsFixed(1)} Hz',
+          _isAudioMode && _currentBpm > 0
+              ? '${_currentBpm.round()} BPM (${(_currentBpm / 60).toStringAsFixed(2)} Hz)'
+              : 'Pico: ${_peakFreq.toStringAsFixed(1)} Hz',
           style: const TextStyle(color: Colors.white70, fontSize: 13),
         ),
       ],

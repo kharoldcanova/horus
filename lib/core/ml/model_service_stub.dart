@@ -27,11 +27,13 @@ class DetectionResult {
 
 class ModelService {
   bool _modelLoaded = false;
+  bool _audioModelLoaded = false;
   final PeakDetection _peakDetector = PeakDetection(
     sampleRate: SensorConstants.defaultSampleRate,
   );
 
   bool get isModelLoaded => _modelLoaded;
+  bool get isAudioModelLoaded => _audioModelLoaded;
 
   // ignore: unused_field
   static const int _inputSize = 256;
@@ -41,6 +43,7 @@ class ModelService {
   Future<void> loadModel() async {
     // Web: no native TFLite support — skip loading, always use fallback.
     _modelLoaded = false;
+    _audioModelLoaded = false;
   }
 
   DetectionResult classify({
@@ -48,6 +51,23 @@ class ModelService {
     required DetectionMode mode,
   }) {
     return _fallbackDetection(window, mode);
+  }
+
+  DetectionResult classifyAudio({
+    required List<double> signal,
+    required double bpm,
+    required double peakConfidence,
+    required double timestamp,
+  }) {
+    final detected = bpm >= 30.0 && bpm <= 220.0 && peakConfidence > 0.3;
+    return DetectionResult(
+      heartbeatDetected: detected,
+      bpm: bpm,
+      confidence: peakConfidence,
+      mode: DetectionMode.audio,
+      timestamp: timestamp,
+      metadata: {'peak_confidence': peakConfidence, 'model': 'unavailable'},
+    );
   }
 
   DetectionResult _fallbackDetection(
@@ -84,5 +104,6 @@ class ModelService {
 
   void dispose() {
     _modelLoaded = false;
+    _audioModelLoaded = false;
   }
 }

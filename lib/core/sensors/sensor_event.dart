@@ -64,12 +64,14 @@ class SensorSession {
   final DateTime startTime;
   final List<SensorEvent> events;
   final String? notes;
+  final List<double>? audioSamples;
 
   SensorSession({
     required this.id,
     required this.startTime,
     List<SensorEvent>? events,
     this.notes,
+    this.audioSamples,
   }) : events = events ?? [];
 
   Duration get duration =>
@@ -92,6 +94,7 @@ class SensorSession {
         'startTime': startTime.toIso8601String(),
         'events': events.map((e) => e.toJson()).toList(),
         if (notes != null) 'notes': notes,
+        if (audioSamples != null) 'audioSamples': audioSamples,
       };
 
   factory SensorSession.fromJson(Map<String, dynamic> json) {
@@ -102,6 +105,9 @@ class SensorSession {
           .map((e) => SensorEvent.fromJson(e as Map<String, dynamic>))
           .toList(),
       notes: json['notes'] as String?,
+      audioSamples: json['audioSamples'] != null
+          ? (json['audioSamples'] as List).cast<double>()
+          : null,
     );
   }
 }

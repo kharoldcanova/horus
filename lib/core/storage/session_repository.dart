@@ -68,6 +68,8 @@ class SessionRepository {
       'notes': session.notes,
       'eventCount': session.events.length,
       'duration': session.duration.inMilliseconds / 1000.0,
+      if (session.audioSamples != null)
+        'audioSampleCount': session.audioSamples!.length,
     });
     await _writeIndex(index);
 
