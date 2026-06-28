@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/sensors/sensor_event.dart';
 import '../../core/sensors/sensor_service.dart';
 import '../../core/ml/model_service.dart';
+import '../../core/storage/preferences_repository.dart';
 import '../../core/storage/session_repository.dart';
 import '../../shared/theme/app_theme.dart';
 
@@ -29,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen>
   DetectionResult? _lastResult;
   String _currentSessionId = '';
   int _scansToday = 0;
+  StreamSubscription<List<SensorEvent>>? _scanSubscription;
 
   @override
   void initState() {
@@ -45,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scanSubscription?.cancel();
     _sensorService.dispose();
     _modelService.dispose();
     super.dispose();
@@ -64,7 +69,8 @@ class _HomeScreenState extends State<HomeScreen>
         _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
       });
 
-      _sensorService.processedStream.listen((events) {
+      _scanSubscription?.cancel();
+      _scanSubscription = _sensorService.processedStream.listen((events) {
         if (!mounted) return;
         _window.addAll(events);
         if (_window.length > 256) {
@@ -84,12 +90,27 @@ class _HomeScreenState extends State<HomeScreen>
     } catch (_) {}
   }
 
-  void _stopScan() {
-    _sensorService.stop();
-    setState(() {
-      _isScanning = false;
-      _showFeedback = true;
-    });
+  Future<void> _stopScan() async {
+    _scanSubscription?.cancel();
+    _scanSubscription = null;
+    await _sensorService.stop();
+
+    // Check auto-feedback preference — skip the prompt when model is
+    // confident enough (>80%) and the user enabled the setting.
+    final prefs = PreferencesRepository();
+    final autoFeedback = await prefs.getAutoFeedback();
+
+    if (autoFeedback && _lastResult != null && _lastResult!.confidence > 0.8) {
+      await _submitFeedback(_lastResult!.heartbeatDetected);
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isScanning = false;
+        _showFeedback = true;
+      });
+    }
   }
 
   Future<void> _submitFeedback(bool heartbeatDetected) async {
@@ -108,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (!mounted) return;
     setState(() {
+      _isScanning = false;
       _showFeedback = false;
       _scansToday++;
     });
