@@ -1,5 +1,6 @@
-import 'dart:math';
+import '../processing/peak_detection.dart';
 import '../sensors/sensor_event.dart';
+import '../sensors/sensor_constants.dart';
 
 // Keep DetectionMode and DetectionResult identical to model_service_io.dart
 // so both implementations expose the exact same API.
@@ -26,6 +27,9 @@ class DetectionResult {
 
 class ModelService {
   bool _modelLoaded = false;
+  final PeakDetection _peakDetector = PeakDetection(
+    sampleRate: SensorConstants.defaultSampleRate,
+  );
 
   bool get isModelLoaded => _modelLoaded;
 
@@ -58,29 +62,21 @@ class ModelService {
       );
     }
 
-    final magnitudes = window.map((e) => e.magnitude).toList();
-    final mean =
-        magnitudes.reduce((a, b) => a + b) / magnitudes.length;
-    final variance = magnitudes
-            .map((m) => (m - mean) * (m - mean))
-            .reduce((a, b) => a + b) /
-        magnitudes.length;
-    final std = variance <= 0 ? 0.0 : sqrt(variance);
+    // Use GCG signal (gyroscope magnitude) — per Centracchio 2025.
+    final signal = window.map((e) => sqrt(e.gx * e.gx + e.gy * e.gy + e.gz * e.gz)).toList();
+    final analysis = _peakDetector.analyzeHeartRate(signal);
 
-    final activity =
-        magnitudes.map((m) => m.abs()).reduce((a, b) => a > b ? a : b);
-
-    final detected = activity > mean + std * 2.0;
+    final detected = analysis['bpm']! >= SensorConstants.minValidBpm &&
+        analysis['confidence']! > 0.3;
 
     return DetectionResult(
       heartbeatDetected: detected,
-      bpm: 0.0,
-      confidence: detected ? 0.3 : 0.7,
+      bpm: analysis['bpm']!,
+      confidence: analysis['confidence']!,
       mode: mode,
       timestamp: window.last.timestamp,
       metadata: {
-        'signal_activity': activity,
-        'signal_std': std,
+        'peak_interval': analysis['meanInterval'],
         'fallback': true,
       },
     );

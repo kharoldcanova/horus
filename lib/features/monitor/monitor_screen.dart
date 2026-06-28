@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -84,9 +85,11 @@ class _MonitorScreenState extends State<MonitorScreen> {
   }
 
   void _computeFftAndBpm() {
+    // Use GCG (gyroscope magnitude) — outperforms accelerometer for
+    // mechanical heartbeat detection (Centracchio 2025).
     final signal = _buffer
         .sublist(_buffer.length - 256)
-        .map((e) => e.magnitude)
+        .map((e) => sqrt(e.gx * e.gx + e.gy * e.gy + e.gz * e.gz))
         .toList();
 
     _magnitudes = FFTAnalyzer.magnitudeSpectrum(signal);

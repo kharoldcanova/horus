@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../processing/filters.dart';
 import 'sensor_event.dart';
 import 'sensor_plugin.dart';
 import 'sensor_constants.dart';
@@ -19,8 +20,22 @@ class SensorService {
   StreamSubscription? _subscription;
   bool _isRunning = false;
 
+  /// Buffer for events accumulated during one resampling window.
   List<SensorEvent> _buffer = [];
-  double _accumulator = 0.0;
+
+  /// Tracks the output timestamp of the last processed sample.
+  double? _lastOutputTime;
+
+  /// One Butterworth bandpass filter per channel (ax, ay, az, gx, gy, gz).
+  /// Filters are stateful IIR — one instance per channel.
+  late final List<ButterworthFilter> _filters = List.generate(
+    6,
+    (_) => ButterworthFilter.bandpass(
+      lowFreq: SensorConstants.minCardiacFreq,
+      highFreq: SensorConstants.maxCardiacFreq,
+      sampleRate: SensorConstants.defaultSampleRate,
+    ),
+  );
 
   Stream<List<SensorEvent>> get rawStream => _rawStreamController.stream;
   Stream<List<SensorEvent>> get processedStream =>
@@ -35,7 +50,10 @@ class SensorService {
 
     _isRunning = true;
     _buffer = [];
-    _accumulator = 0.0;
+    _lastOutputTime = null;
+    for (final f in _filters) {
+      f.reset();
+    }
 
     _subscription = SensorPlugin.eventStream.listen(
       (events) {
@@ -54,7 +72,7 @@ class SensorService {
     _subscription = null;
     _isRunning = false;
     _buffer = [];
-    _accumulator = 0.0;
+    _lastOutputTime = null;
   }
 
   void _resampleAndBuffer(List<SensorEvent> events) {
@@ -62,20 +80,38 @@ class SensorService {
     final interpolated = <SensorEvent>[];
 
     for (final event in events) {
-      _accumulator += event.timestamp;
-      if (_buffer.isEmpty || _accumulator >= targetDt) {
-        if (_buffer.isNotEmpty) {
-          interpolated.add(_interpolate(_buffer, targetDt));
-        }
+      if (_buffer.isEmpty) {
         _buffer = [event];
-        _accumulator = 0.0;
-      } else {
-        _buffer.add(event);
+        _lastOutputTime ??= event.timestamp;
+        continue;
+      }
+
+      // Accumulate events until the buffer spans at least one targetDt.
+      // This produces one interpolated sample every 1/128s regardless of
+      // the native sensor rate (typically ~200 Hz on SENSOR_DELAY_FASTEST).
+      _buffer.add(event);
+      final span = event.timestamp - _buffer.first.timestamp;
+
+      if (span >= targetDt) {
+        interpolated.add(_interpolate(_buffer, targetDt));
+        _lastOutputTime = _lastOutputTime! + targetDt;
+        // Keep the last event as the start of the next window to avoid gaps.
+        _buffer = [_buffer.last];
       }
     }
 
     if (interpolated.isNotEmpty) {
-      _processedController.add(interpolated);
+      // Apply Butterworth bandpass 0.5–30 Hz to every interpolated sample.
+      final filtered = interpolated.map((e) => SensorEvent(
+        timestamp: e.timestamp,
+        ax: _filters[0].filter(e.ax),
+        ay: _filters[1].filter(e.ay),
+        az: _filters[2].filter(e.az),
+        gx: _filters[3].filter(e.gx),
+        gy: _filters[4].filter(e.gy),
+        gz: _filters[5].filter(e.gz),
+      )).toList();
+      _processedController.add(filtered);
     }
   }
 

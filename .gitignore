@@ -26,6 +26,13 @@ migrate_working_dir/
 # AI agent tooling
 .atl/
 
+# Python training artifacts
+python/*.h5
+python/*.npz
+python/__pycache__/
+.venv/
+.venv*/
+
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
