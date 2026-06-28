@@ -1,0 +1,26 @@
+name: horus_app
+description: "Horus — Smartphone-based heartbeat detection for search and rescue"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  permission_handler: ^11.3.0
+  tflite_flutter: ^0.11.0
+  path_provider: ^2.1.0
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/models/
