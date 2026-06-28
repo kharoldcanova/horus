@@ -1,5 +1,7 @@
 # Horus — Smartphone-Based Heartbeat Detection for Urban Search and Rescue
 
+> **English** | [Español](README.es.md)
+
 **Horus** is an open-source mobile application that leverages smartphone inertial sensors (accelerometer and gyroscope), audio capabilities, and camera-based photoplethysmography to detect human heartbeats through solid structures such as rubble and debris. The system is designed for first responders in Urban Search and Rescue (USAR) operations, providing a low-cost, widely-accessible tool for locating survivors in disaster zones.
 
 ---
