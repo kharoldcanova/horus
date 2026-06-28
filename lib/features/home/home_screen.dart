@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/sensors/sensor_event.dart';
 import '../../core/sensors/sensor_service.dart';
 import '../../core/sensors/sensor_constants.dart';
+import '../../core/audio/audio_service.dart';
 import '../../core/ml/model_service.dart';
 import '../../core/storage/preferences_repository.dart';
 import '../../core/storage/session_repository.dart';
@@ -20,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with WidgetsBindingObserver {
   final SensorService _sensorService = SensorService.instance;
+  final AudioService _audioService = AudioService.instance;
   final ModelService _modelService = ModelService();
 
   // ignore: unused_field
@@ -32,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen>
   DetectionResult? _lastResult;
   String _currentSessionId = '';
   int _scansToday = 0;
-  StreamSubscription<List<SensorEvent>>? _scanSubscription;
+  StreamSubscription<dynamic>? _scanSubscription;
 
   @override
   void initState() {
@@ -50,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scanSubscription?.cancel();
+    _audioService.dispose();
     _sensorService.dispose();
     _modelService.dispose();
     super.dispose();
@@ -59,7 +62,23 @@ class _HomeScreenState extends State<HomeScreen>
     if (_isScanning) return;
 
     try {
-      await _sensorService.start();
+      if (mode == SearchMode.audio) {
+        final started = await _audioService.start();
+        if (!started) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Permiso de micrófono denegado'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+      } else {
+        await _sensorService.start();
+      }
+
       setState(() {
         _activeMode = mode;
         _isScanning = true;
@@ -70,30 +89,50 @@ class _HomeScreenState extends State<HomeScreen>
       });
 
       _scanSubscription?.cancel();
-      _scanSubscription = _sensorService.processedStream.listen((events) {
-        if (!mounted) return;
-        _window.addAll(events);
-        if (_window.length > 256) {
-          _window = _window.sublist(_window.length - 256);
-        }
-
-        if (_window.length >= 128 && _modelReady) {
-          final result = _modelService.classify(
-            window: _window,
-            mode: DetectionMode.imu,
-          );
+      if (mode == SearchMode.audio) {
+        _scanSubscription = _audioService.frameStream.listen((frame) {
+          if (!mounted) return;
           setState(() {
-            _lastResult = result;
+            _lastResult = DetectionResult(
+              heartbeatDetected: frame.hasHeartbeat,
+              bpm: frame.bpm,
+              confidence: frame.confidence,
+              mode: DetectionMode.audio,
+              timestamp: frame.timestamp.millisecondsSinceEpoch / 1000.0,
+            );
           });
-        }
-      });
+        });
+      } else {
+        _scanSubscription = _sensorService.processedStream.listen((events) {
+          if (!mounted) return;
+          _window.addAll(events);
+          if (_window.length > 256) {
+            _window = _window.sublist(_window.length - 256);
+          }
+
+          if (_window.length >= 128 && _modelReady) {
+            final result = _modelService.classify(
+              window: _window,
+              mode: DetectionMode.imu,
+            );
+            setState(() {
+              _lastResult = result;
+            });
+          }
+        });
+      }
     } catch (_) {}
   }
 
   Future<void> _stopScan() async {
     _scanSubscription?.cancel();
     _scanSubscription = null;
-    await _sensorService.stop();
+
+    if (_activeMode == SearchMode.audio) {
+      await _audioService.stop();
+    } else {
+      await _sensorService.stop();
+    }
 
     // Check auto-feedback preference — skip the prompt when model is
     // confident enough (>80%) and the user enabled the setting.
