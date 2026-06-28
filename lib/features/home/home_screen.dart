@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/sensors/sensor_event.dart';
 import '../../core/sensors/sensor_service.dart';
 import '../../core/ml/model_service.dart';
+import '../../core/storage/session_repository.dart';
 import '../../shared/theme/app_theme.dart';
 
 enum SearchMode { imu, audio, camera }
@@ -91,15 +92,21 @@ class _HomeScreenState extends State<HomeScreen>
     });
   }
 
-  void _submitFeedback(bool heartbeatDetected) {
-    // TODO: persist session to local storage
-    // ignore: unused_local_variable
+  Future<void> _submitFeedback(bool heartbeatDetected) async {
     final session = SensorSession(
       id: _currentSessionId,
       startTime: DateTime.now(),
       events: _window,
       notes: heartbeatDetected ? 'latido_confirmado' : 'sin_latido',
     );
+
+    try {
+      await SessionRepository().saveSession(session);
+    } catch (_) {
+      // Persistence failure is non-critical — UI continues regardless
+    }
+
+    if (!mounted) return;
     setState(() {
       _showFeedback = false;
       _scansToday++;

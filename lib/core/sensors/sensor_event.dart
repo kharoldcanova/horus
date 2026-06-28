@@ -18,6 +18,28 @@ class SensorEvent {
 
   List<double> toList() => [ax, ay, az, gx, gy, gz];
 
+  Map<String, dynamic> toJson() => {
+        'timestamp': timestamp,
+        'ax': ax,
+        'ay': ay,
+        'az': az,
+        'gx': gx,
+        'gy': gy,
+        'gz': gz,
+      };
+
+  factory SensorEvent.fromJson(Map<String, dynamic> json) {
+    return SensorEvent(
+      timestamp: (json['timestamp'] as num).toDouble(),
+      ax: (json['ax'] as num).toDouble(),
+      ay: (json['ay'] as num).toDouble(),
+      az: (json['az'] as num).toDouble(),
+      gx: (json['gx'] as num).toDouble(),
+      gy: (json['gy'] as num).toDouble(),
+      gz: (json['gz'] as num).toDouble(),
+    );
+  }
+
   factory SensorEvent.fromList(List<double> values, double timestamp) {
     return SensorEvent(
       timestamp: timestamp,
@@ -63,5 +85,23 @@ class SensorSession {
     final dt = events.last.timestamp - events.first.timestamp;
     if (dt <= 0) return 0;
     return (events.length - 1) / dt;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'startTime': startTime.toIso8601String(),
+        'events': events.map((e) => e.toJson()).toList(),
+        if (notes != null) 'notes': notes,
+      };
+
+  factory SensorSession.fromJson(Map<String, dynamic> json) {
+    return SensorSession(
+      id: json['id'] as String,
+      startTime: DateTime.parse(json['startTime'] as String),
+      events: (json['events'] as List)
+          .map((e) => SensorEvent.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      notes: json['notes'] as String?,
+    );
   }
 }
