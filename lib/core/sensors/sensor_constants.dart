@@ -1,3 +1,13 @@
+/// Available search/detection modes.
+/// Each mode uses a different sensor to detect heartbeats.
+enum SearchMode {
+  /// Accelerometer + Gyroscope — primary mode for USAR.
+  imu,
+
+  /// Contact microphone — confirmatory mode, stethoscope-like.
+  audio,
+}
+
 class SensorConstants {
   static const channelName = 'com.horus.app/sensor_stream';
   static const methodStart = 'startSensorStream';

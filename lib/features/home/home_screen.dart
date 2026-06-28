@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/sensors/sensor_event.dart';
 import '../../core/sensors/sensor_service.dart';
+import '../../core/sensors/sensor_constants.dart';
 import '../../core/ml/model_service.dart';
 import '../../core/storage/preferences_repository.dart';
 import '../../core/storage/session_repository.dart';
+import '../../shared/widgets/phone_position_guide.dart';
 import '../../shared/theme/app_theme.dart';
-
-enum SearchMode { imu, audio, camera }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -205,14 +205,6 @@ class _HomeScreenState extends State<HomeScreen>
               mode: SearchMode.audio,
               color: Colors.cyan,
             ),
-            const SizedBox(height: 12),
-            _buildModeCard(
-              icon: Icons.camera_alt,
-              title: 'Cámara (rPPG)',
-              subtitle: 'Detección por cámara frontal\nSolo si hay línea de visión al rostro',
-              mode: SearchMode.camera,
-              color: Colors.amber,
-            ),
           ],
         ],
       ),
@@ -305,6 +297,8 @@ class _HomeScreenState extends State<HomeScreen>
 
     return Column(
       children: [
+        PhonePositionGuide(mode: _activeMode ?? SearchMode.imu),
+        const SizedBox(height: 16),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -413,15 +407,6 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          'Apoyá el teléfono sobre la superficie y mantenelo firme',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withValues(alpha: 0.4),
-          ),
-        ),
-        const SizedBox(height: 16),
       ],
     );
   }
