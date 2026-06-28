@@ -4,6 +4,12 @@ import 'sensor_plugin.dart';
 import 'sensor_constants.dart';
 
 class SensorService {
+  /// Shared singleton instance so HomeScreen, MonitorScreen, etc.
+  /// all receive the same sensor stream without duplicating native listeners.
+  static final SensorService instance = SensorService._();
+
+  SensorService._();
+
   final StreamController<List<SensorEvent>> _rawStreamController =
       StreamController<List<SensorEvent>>.broadcast();
 

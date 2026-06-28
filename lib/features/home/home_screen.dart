@@ -15,7 +15,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with WidgetsBindingObserver {
-  final SensorService _sensorService = SensorService();
+  final SensorService _sensorService = SensorService.instance;
   final ModelService _modelService = ModelService();
 
   // ignore: unused_field
